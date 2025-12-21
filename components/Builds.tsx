@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Project } from '../types';
 import { ArrowUpRightIcon, LoaderIcon } from './Icons';
-import { getAllBuilds } from '../services/authService';
+import { getShowcaseBuilds } from '../services/authService';
 
 export const Builds: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const data = getAllBuilds();
-    // Filter only live projects
-    setProjects(data.filter(p => p.status !== 'draft'));
-    setLoading(false);
+    // Subscribe to live showcase builds
+    const unsubscribe = getShowcaseBuilds((data) => {
+      setProjects(data);
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
   }, []);
 
   if (loading) return <div className="min-h-screen pt-48 flex justify-center"><LoaderIcon className="animate-spin text-zinc-600" /></div>;

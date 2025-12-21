@@ -5,7 +5,7 @@ import {
 } from './Icons';
 import { Button } from './Button';
 import { ProductItem } from '../types';
-import { getAllProducts } from '../services/authService';
+import { getLiveProducts } from '../services/authService';
 
 interface ProductsProps {
   onAddToCart?: (product: ProductItem) => void;
@@ -31,12 +31,14 @@ export const Products: React.FC<ProductsProps> = ({ onAddToCart, onProductClick 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app this would be an async fetch, but here we read from our "DB"
-    const data = getAllProducts();
-    // Filter only live products for public view
-    const liveProducts = data.filter(p => p.status !== 'draft');
-    setProducts(liveProducts);
-    setLoading(false);
+    // Subscribe to live products from Firestore
+    const unsubscribe = getLiveProducts((data) => {
+      setProducts(data);
+      setLoading(false);
+    });
+    
+    // Cleanup listener on unmount
+    return () => unsubscribe();
   }, []);
 
   const filteredProducts = products.filter(product => {

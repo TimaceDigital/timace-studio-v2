@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../Button';
 import { LockIcon, ArrowRightIcon } from '../Icons';
-import { login } from '../../services/authService';
+import { loginUser, getUserProfile } from '../../services/authService';
 
 interface AdminLoginProps {
   onLogin: () => void;
@@ -9,9 +9,8 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
-  // Pre-filled for development convenience (now validates against service logic)
-  const [email, setEmail] = useState('admin@timace.studio');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,8 +19,20 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const session = await login(email, password);
-      if (session.user.role === 'admin') {
+      // 1. Authenticate with Firebase Auth
+      const userCredential = await loginUser(email, password);
+      const user = userCredential.user;
+
+      // 2. Check if user is the master admin (hardcoded fallback)
+      if (email === 'kevin@timace.io') {
+        onLogin();
+        return;
+      }
+
+      // 3. Fetch User Profile from Firestore to check Role
+      const profile = await getUserProfile(user.uid);
+
+      if (profile && profile.role === 'admin') {
         onLogin();
       } else {
         setError("Access Denied: Not an administrator.");

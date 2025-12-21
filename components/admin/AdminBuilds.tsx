@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Project } from '../../types';
-import { fetchBuilds, createBuild, updateBuild, deleteBuild, onOrderUpdate } from '../../services/adminService';
+import { getAllShowcaseBuildsAdmin, addShowcaseBuild, updateShowcaseBuild, deleteShowcaseBuild } from '../../services/authService';
 import { Button } from '../Button';
 import { PlusIcon, TrashIcon, SettingsIcon, LayoutIcon, XIcon, LoaderIcon } from '../Icons';
 
@@ -12,16 +12,12 @@ export const AdminBuilds: React.FC = () => {
   const [formData, setFormData] = useState<Partial<Project>>({});
   const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    const data = await fetchBuilds();
-    setBuilds(data);
-    setIsLoading(false);
-  };
-
   useEffect(() => {
-    loadData();
-    const unsubscribe = onOrderUpdate(loadData);
+    // Subscribe to showcase builds
+    const unsubscribe = getAllShowcaseBuildsAdmin((data) => {
+      setBuilds(data);
+      setIsLoading(false);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -44,19 +40,24 @@ export const AdminBuilds: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    if (editingId) {
-      await updateBuild(editingId, formData);
-    } else {
-      await createBuild(formData);
+    try {
+      if (editingId) {
+         const { id, ...updates } = formData as Project;
+        await updateShowcaseBuild(editingId, updates);
+      } else {
+        await addShowcaseBuild(formData as Omit<Project, 'id'>);
+      }
+      setIsFormOpen(false);
+    } catch (error) {
+       console.error("Failed to save build:", error);
+    } finally {
+       setIsLoading(false);
     }
-    setIsFormOpen(false);
-    await loadData();
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Delete this build from portfolio?")) {
-      await deleteBuild(id);
-      await loadData();
+      await deleteShowcaseBuild(id);
     }
   };
 

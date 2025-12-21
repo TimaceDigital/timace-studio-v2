@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderStatus } from '../../types';
-import { fetchAllOrders, updateOrderStatus, onOrderUpdate } from '../../services/adminService';
+import { fetchAllOrders, approveOrder, denyOrder, onOrderUpdate } from '../../services/adminService';
 import { Button } from '../Button';
 import { 
   LoaderIcon, FilterIcon, SearchIcon, ClockIcon, 
@@ -15,7 +15,7 @@ export const AdminOrders: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const loadOrders = async () => {
-    setLoading(true); // Show loading state on manual refresh or initial load
+    setLoading(true);
     try {
       const data = await fetchAllOrders();
       setOrders(data);
@@ -27,40 +27,33 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
-  const loadOrdersSilent = async () => {
-    // Background update without full loading spinner
-    try {
-      const data = await fetchAllOrders();
-      setOrders(data);
-      setLastUpdated(new Date());
-    } catch (e) {
-      console.error("Failed to fetch orders silently", e);
-    }
-  };
-
-  // Initial load and Subscription
   useEffect(() => {
     loadOrders();
     
-    // Subscribe to real-time updates (simulated DB or localStorage events)
     const unsubscribe = onOrderUpdate(() => {
-      loadOrdersSilent();
+       fetchAllOrders().then(data => {
+         setOrders(data);
+         setLastUpdated(new Date());
+       });
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Auto-select first order if none selected
   useEffect(() => {
     if (!selectedOrderId && orders.length > 0) {
       setSelectedOrderId(orders[0].id);
     }
   }, [orders, selectedOrderId]);
 
-  const handleStatusUpdate = async (id: string, newStatus: OrderStatus) => {
-    await updateOrderStatus(id, newStatus);
-    // Optimistic update
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+  const handleApproveOrder = async (id: string) => {
+    await approveOrder(id);
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'approved' } : o));
+  };
+
+  const handleDenyOrder = async (id: string) => {
+    await denyOrder(id);
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'denied' } : o));
   };
 
   if (loading && orders.length === 0) return <div className="flex justify-center p-20"><LoaderIcon className="animate-spin text-zinc-600" /></div>;
@@ -96,7 +89,7 @@ export const AdminOrders: React.FC = () => {
              <input type="text" placeholder="Search orders..." className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-brand-500/50" />
            </div>
            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {['All', 'Queued', 'Proposal', 'Building', 'Review'].map(filter => (
+              {['All', 'Pending', 'Approved', 'Building', 'Review'].map(filter => (
                  <button key={filter} className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-400 text-xs hover:text-white whitespace-nowrap">
                    {filter}
                  </button>
@@ -158,12 +151,12 @@ export const AdminOrders: React.FC = () => {
                     </div>
                  </div>
                  <div className="flex gap-2">
-                    {selectedOrder.status === 'queued' && (
+                    {selectedOrder.status === 'pending_approval' && (
                        <>
-                         <Button className="!py-2 !px-4 !text-xs bg-green-600 hover:bg-green-500 border-none" onClick={() => handleStatusUpdate(selectedOrder.id, 'analyzing')}>
-                           Accept Order
+                         <Button className="!py-2 !px-4 !text-xs bg-green-600 hover:bg-green-500 border-none" onClick={() => handleApproveOrder(selectedOrder.id)}>
+                           Approve
                          </Button>
-                         <Button variant="outline" className="!py-2 !px-4 !text-xs text-red-400 hover:text-red-300 border-zinc-700" onClick={() => handleStatusUpdate(selectedOrder.id, 'denied')}>
+                         <Button variant="outline" className="!py-2 !px-4 !text-xs text-red-400 hover:text-red-300 border-zinc-700" onClick={() => handleDenyOrder(selectedOrder.id)}>
                            Deny
                          </Button>
                        </>
@@ -173,23 +166,6 @@ export const AdminOrders: React.FC = () => {
                          Generate & Send Proposal
                        </Button>
                     )}
-                    <div className="relative group">
-                       <Button variant="secondary" className="!py-2 !px-4 !text-xs flex items-center gap-2">
-                         {selectedOrder.status.toUpperCase()} <ChevronDownIcon size={14} />
-                       </Button>
-                       {/* Status Dropdown */}
-                       <div className="absolute right-0 top-full mt-2 w-40 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hidden group-hover:block z-50 shadow-xl">
-                          {['queued', 'analyzing', 'building', 'review', 'completed', 'cancelled'].map((s) => (
-                             <button 
-                                key={s}
-                                onClick={() => handleStatusUpdate(selectedOrder.id, s as OrderStatus)}
-                                className="w-full text-left px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 capitalize"
-                             >
-                                {s}
-                             </button>
-                          ))}
-                       </div>
-                    </div>
                  </div>
               </div>
 

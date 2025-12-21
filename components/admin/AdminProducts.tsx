@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProductItem } from '../../types';
-import { fetchProducts, createProduct, updateProduct, deleteProduct, onOrderUpdate } from '../../services/adminService';
+import { getAllProductsAdmin, addProduct, updateProduct as updateProductService, deleteProduct as deleteProductService } from '../../services/authService';
 import { Button } from '../Button';
 import { PlusIcon, TrashIcon, SettingsIcon, ShoppingBagIcon, CheckCircleIcon, XIcon, LoaderIcon, UploadIcon } from '../Icons';
 
@@ -13,17 +13,12 @@ export const AdminProducts: React.FC = () => {
   const [formData, setFormData] = useState<Partial<ProductItem>>({});
   const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    const data = await fetchProducts();
-    setProducts(data);
-    setIsLoading(false);
-  };
-
   useEffect(() => {
-    loadData();
-    // Subscribe to updates (shares event emitter with orders/authService)
-    const unsubscribe = onOrderUpdate(loadData);
+    // Subscribe to all products (admin view)
+    const unsubscribe = getAllProductsAdmin((data) => {
+      setProducts(data);
+      setIsLoading(false);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -48,20 +43,28 @@ export const AdminProducts: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    if (editingId) {
-      await updateProduct(editingId, formData);
-    } else {
-      await createProduct(formData);
+    setIsLoading(true); // Optimistic UI or just indicator
+    
+    try {
+      if (editingId) {
+        // Remove ID from payload
+        const { id, ...updates } = formData as ProductItem;
+        await updateProductService(editingId, updates);
+      } else {
+        await addProduct(formData as Omit<ProductItem, 'id'>);
+      }
+      setIsFormOpen(false);
+    } catch (error) {
+      console.error("Failed to save product:", error);
+      alert("Error saving product. Check console.");
+    } finally {
+      setIsLoading(false); // Listener will update list
     }
-    setIsFormOpen(false);
-    await loadData();
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this product?")) {
-      await deleteProduct(id);
-      await loadData();
+      await deleteProductService(id);
     }
   };
 

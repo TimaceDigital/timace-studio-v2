@@ -58,15 +58,15 @@ export interface ProductItem {
 // --- Dashboard & Production Types ---
 
 export type OrderStatus = 'queued' | 'analyzing' | 'building' | 'review' | 'completed' | 'cancelled' | 'denied';
+export type UserRole = 'client' | 'admin';
 
 export interface UserProfile {
-  id: string;
-  name: string;
+  userId: string;
   email: string;
-  avatarUrl?: string;
-  role: 'client' | 'admin';
+  displayName?: string;
+  role: UserRole;
   companyName?: string;
-  joinedAt?: string;
+  createdAt?: string;
   preferences?: {
     emailNotifications: boolean;
     slackIntegration: boolean;

@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type, Content } from "@google/genai";
 import { AnalysisResponse, AiSuggestion, AutofillConfig } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "PLACEHOLDER_KEY";
+const ai = new GoogleGenAI({ apiKey });
 
 export const analyzeProjectIdea = async (idea: string): Promise<AnalysisResponse> => {
   try {

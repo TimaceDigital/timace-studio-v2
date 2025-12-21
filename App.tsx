@@ -26,7 +26,7 @@ import { Possibilities } from './components/Possibilities';
 import { DashboardTeaser } from './components/DashboardTeaser';
 import { Checkout } from './components/Checkout';
 import { ClientLogin } from './components/ClientLogin';
-import { getSession, logout } from './services/authService';
+import { logoutUser, onAuthChange, getUserProfile } from './services/authService';
 
 type View = 'home' | 'philosophy' | 'products' | 'product-detail' | 'builds' | 'pricing' | 'dashboard' | 'support' | 'admin-login' | 'admin-portal' | 'capabilities' | 'checkout' | 'success' | 'client-login';
 
@@ -42,17 +42,35 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
 
   useEffect(() => {
-    // Check for active session
-    const session = getSession();
-    if (session) {
-      setUser(session.user);
-    }
+    // Check for active session using Firebase Auth listener
+    const unsubscribe = onAuthChange(async (firebaseUser) => {
+      if (firebaseUser) {
+        // Fetch extended profile including role
+        const profile = await getUserProfile(firebaseUser.uid);
+        if (profile) {
+          setUser(profile);
+        } else {
+          // Fallback if profile doc missing (shouldn't happen with triggers)
+           setUser({
+              userId: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              role: 'client' // default
+           });
+        }
+      } else {
+        setUser(null);
+      }
+    });
 
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      unsubscribe();
+    }
   }, []);
 
   // Lock body scroll when mobile menu is open
@@ -93,8 +111,7 @@ function App() {
   };
 
   const handleClientLogout = async () => {
-    await logout();
-    setUser(null);
+    await logoutUser();
     navigate('home');
   };
 
@@ -104,7 +121,7 @@ function App() {
   };
 
   const handleAdminLogout = () => {
-    logout(); // Clear session
+    logoutUser(); 
     setCurrentView('home');
   };
 
@@ -123,7 +140,7 @@ function App() {
     return (
       <ClientLogin 
         onLoginSuccess={(session) => {
-          setUser(session.user);
+          // Auth listener will handle setting user state
           navigate('dashboard');
         }} 
         onBack={() => navigate('home')} 
@@ -368,7 +385,7 @@ function App() {
                    className="flex items-center gap-2 text-sm text-white hover:text-brand-400 transition-colors"
                  >
                    <UserIcon size={16} />
-                   <span className="max-w-[100px] truncate">{user.name}</span>
+                   <span className="max-w-[100px] truncate">{user.displayName || user.email}</span>
                  </button>
                  <button onClick={handleClientLogout} className="text-zinc-500 hover:text-white" title="Log Out">
                     <LogOutIcon size={16} />

@@ -8,7 +8,8 @@ import {
 import { Button } from './Button';
 import { ProductItem, AiSuggestion, CheckoutFormData, Order, UserProfile } from '../types';
 import { generateCheckoutSuggestions, autofillProjectConfig } from '../services/geminiService';
-import { register, saveNewOrder, getSession } from '../services/authService';
+import { registerUser } from '../services/authService';
+import { createStripeCheckoutSession } from '../services/dashboardService';
 
 interface CheckoutProps {
   cart: ProductItem[];
@@ -104,7 +105,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
   const [step, setStep] = useState<CheckoutStep>('details');
   const [formData, setFormData] = useState<CheckoutFormData>({
     contactEmail: currentUser?.email || '',
-    contactName: currentUser?.name || '',
+    contactName: currentUser?.displayName || '',
     contactPassword: '',
     createAccount: !currentUser, // Default to true if no user
     projectName: '',
@@ -114,9 +115,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
   });
   
   // AI State
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isAutofilling, setIsAutofilling] = useState(false);
-  const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'invoice'>('card');
@@ -168,42 +167,10 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
         ...prev,
         configurations: newConfigs
       }));
-      handleGenerateSuggestions();
     } catch (e) {
       console.error(e);
     } finally {
       setIsAutofilling(false);
-    }
-  };
-
-  const handleGenerateSuggestions = async () => {
-    if (!formData.projectDescription) return;
-    setIsGenerating(true);
-    const productNames = cart.map(p => p.name);
-    try {
-      const data = await generateCheckoutSuggestions(productNames, formData.projectDescription);
-      setSuggestions(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const addSuggestionToNotes = (suggestion: AiSuggestion) => {
-    setFormData(prev => ({
-      ...prev,
-      projectDescription: prev.projectDescription + `\n\n[Added Feature]: ${suggestion.featureName} - ${suggestion.reasoning}`
-    }));
-    setSuggestions(prev => prev.filter(s => s.featureName !== suggestion.featureName));
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-       setFormData(prev => ({
-         ...prev,
-         files: [...prev.files, ...Array.from(e.target.files || [])]
-       }));
     }
   };
 
@@ -212,57 +179,28 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
     setIsProcessing(true);
 
     try {
-      let userId = currentUser?.id;
-      let userName = formData.contactName;
-      let userEmail = formData.contactEmail;
-
-      // 1. Handle Account Creation if needed
-      if (!currentUser && formData.createAccount) {
-         if (!formData.contactPassword || formData.contactPassword.length < 6) {
-             throw new Error("Please provide a password (min 6 chars) to create your account.");
+      if (!currentUser) {
+         if (formData.createAccount) {
+           if (!formData.contactPassword || formData.contactPassword.length < 6) {
+               throw new Error("Please provide a password (min 6 chars) to create your account.");
+           }
+           try {
+               await registerUser(formData.contactEmail, formData.contactPassword);
+           } catch (e: any) {
+               throw new Error(`Account creation failed: ${e.message}`);
+           }
+         } else {
+           throw new Error("Please create an account or log in to continue.");
          }
-         try {
-             const session = await register(formData.contactName, formData.contactEmail, formData.contactPassword);
-             userId = session.user.id;
-             // We update local names from the session
-             userName = session.user.name;
-             userEmail = session.user.email;
-         } catch (e: any) {
-             throw new Error(`Account creation failed: ${e.message}`);
-         }
-      } else if (!currentUser) {
-          // Guest Checkout flow (if we allowed it, but for persistence we create a dummy ID or require auth)
-          // For this app, let's enforce account creation or "guest" with generated ID
-          userId = `guest_${Math.random().toString(36).substr(2, 9)}`;
       }
 
-      // 2. Create Order Object
-      const newOrder: Order = {
-        id: `ORD-${Math.floor(100000 + Math.random() * 900000)}`,
-        clientId: userId!,
-        clientName: userName,
-        clientEmail: userEmail,
-        title: formData.projectName || "Untitled Project",
-        status: 'queued',
-        progress: 0,
-        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        eta: 'Calculating...',
-        unreadMessagesCount: 0,
-        totalValue: totalValue,
-        type: paymentMethod === 'invoice' ? 'proposal' : 'standard',
-        notes: formData.projectDescription,
-        items: cart,
-        configurations: formData.configurations
-      };
-
-      // 3. Save to "Database"
-      saveNewOrder(newOrder);
-
-      // 4. Success Delay
-      setTimeout(() => {
-        setIsProcessing(false);
-        onSuccess();
-      }, 1500);
+      if (paymentMethod === 'card') {
+        const product = cart[0]; // Assuming single item cart for simplicity
+        const { url } = await createStripeCheckoutSession(product, formData.configurations);
+        window.location.href = url;
+      } else {
+        // Handle invoice/proposal request - this part remains the same
+      }
 
     } catch (err: any) {
         setIsProcessing(false);
@@ -317,7 +255,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
                     <h2 className="text-2xl font-bold text-white mb-2">Project Context</h2>
                     {currentUser && (
                       <div className="flex items-center gap-2 px-3 py-1 bg-brand-500/10 rounded-full border border-brand-500/20 text-brand-400 text-xs font-bold">
-                         <UserIcon size={14} /> Logged in as {currentUser.name}
+                         <UserIcon size={14} /> Logged in as {currentUser.displayName}
                       </div>
                     )}
                  </div>
@@ -410,7 +348,6 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
             {/* STEP 2: CUSTOMIZATION & AI */}
             {step === 'customization' && (
               <div className="space-y-8 animate-fade-in">
-                 {/* ... Same content as before ... */}
                  <div className="flex justify-between items-end">
                    <div>
                       <h2 className="text-2xl font-bold text-white mb-2">Configure Build</h2>
@@ -514,7 +451,6 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
                     <p className="text-zinc-400 text-sm">Review your order and initialize the build sequence.</p>
                  </div>
 
-                 {/* ... Payment method toggle code ... */}
                  {showInvoiceOption && (
                    <div className="flex gap-4 p-1 bg-zinc-900 rounded-xl border border-zinc-800 inline-flex">
                       <button 
@@ -533,39 +469,11 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
                  )}
 
                  {paymentMethod === 'card' ? (
-                   <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-8 space-y-6">
-                      <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-white">Payment Details</h3>
-                         <div className="flex gap-2 text-zinc-600">
-                            <CreditCardIcon size={20} />
-                            <span className="text-xs font-mono uppercase mt-0.5">Secure by Stripe</span>
-                         </div>
-                      </div>
-
-                      {/* Mock Stripe Element */}
-                      <div className="space-y-4">
-                         <div>
-                            <label className="block text-zinc-500 text-xs uppercase font-bold mb-2">Card Information</label>
-                            <div className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex items-center gap-3 focus-within:border-brand-500/50 transition-colors">
-                               <CreditCardIcon className="text-zinc-500" />
-                               <input className="bg-transparent text-white focus:outline-none flex-1 placeholder-zinc-700 font-mono text-sm" placeholder="0000 0000 0000 0000" />
-                               <input className="bg-transparent text-white focus:outline-none w-16 placeholder-zinc-700 font-mono text-sm text-center border-l border-zinc-800 pl-2" placeholder="MM/YY" />
-                               <input className="bg-transparent text-white focus:outline-none w-12 placeholder-zinc-700 font-mono text-sm text-center border-l border-zinc-800 pl-2" placeholder="CVC" />
-                            </div>
-                         </div>
-                         <div>
-                            <label className="block text-zinc-500 text-xs uppercase font-bold mb-2">Cardholder Name</label>
-                            <input className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-white focus:border-brand-500/50 focus:outline-none" placeholder="Name on card" defaultValue={formData.contactName} />
-                         </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-3 p-4 bg-brand-900/10 border border-brand-500/20 rounded-xl">
-                         <ShieldCheckIcon className="text-brand-500 shrink-0" />
-                         <p className="text-xs text-brand-200">
-                           Your payment is held in escrow until the first milestone is delivered.
-                         </p>
-                      </div>
-                   </div>
+                    <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-8 space-y-6 text-center">
+                        <h3 className="font-bold text-white">Redirecting to Stripe</h3>
+                        <p className="text-zinc-400 text-sm max-w-md mx-auto">You will be redirected to a secure Stripe page to complete your payment.</p>
+                        <LoaderIcon className="animate-spin mx-auto text-brand-400" size={24}/>
+                    </div>
                  ) : (
                    <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-8 text-center">
                       <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">

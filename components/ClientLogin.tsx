@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './Button';
 import { LockIcon, ArrowRightIcon, UserIcon, MailIcon, CheckCircleIcon } from './Icons';
-import { login, register } from '../services/authService';
+import { loginUser, registerUser } from '../services/authService';
 import { AuthSession } from '../types';
 
 interface ClientLoginProps {
@@ -21,14 +21,33 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
     setIsLoading(true);
 
     try {
-      let session;
+      let user;
       if (isLogin) {
-        session = await login(formData.email, formData.password);
+        // Sign in
+        const userCredential = await loginUser(formData.email, formData.password);
+        user = userCredential.user;
       } else {
-        session = await register(formData.name, formData.email, formData.password);
+        // Sign up
+        user = await registerUser(formData.email, formData.password);
+        // Note: Ideally, update profile with display name here.
       }
+      
+      // Construct a session object (simplified for this context)
+      // In a real app, you might fetch the full profile or rely on an Auth Context
+      const session: AuthSession = {
+          user: {
+            userId: user.uid,
+            email: user.email || '',
+            displayName: formData.name, // Local display for now, should be from profile
+            role: 'client' // Default role
+          },
+          token: await user.getIdToken(),
+          expiresAt: Date.now() + 3600 * 1000 // Placeholder expiration
+      };
+
       onLoginSuccess(session);
     } catch (err: any) {
+      console.error(err);
       setError(err.message || 'Authentication failed');
     } finally {
       setIsLoading(false);
