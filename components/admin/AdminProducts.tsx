@@ -34,7 +34,8 @@ export const AdminProducts: React.FC = () => {
       status: 'draft',
       gradient: 'from-zinc-700 to-zinc-900',
       iconName: 'RocketIcon',
-      price: '€',
+      price: '€0',
+      priceValue: 0,
       features: []
     });
     setEditingId(null);
@@ -66,6 +67,15 @@ export const AdminProducts: React.FC = () => {
     if (window.confirm("Are you sure you want to delete this product?")) {
       await deleteProductService(id);
     }
+  };
+
+  const handlePriceValueChange = (val: string) => {
+    const num = parseFloat(val);
+    setFormData(prev => ({
+        ...prev,
+        priceValue: isNaN(num) ? 0 : num,
+        price: isNaN(num) ? 'Custom' : `€${num.toLocaleString()}`
+    }));
   };
 
   // Helper to handle array inputs like features/tags (comma separated)
@@ -107,15 +117,29 @@ export const AdminProducts: React.FC = () => {
                 required
               />
             </div>
-            <div className="col-span-2 md:col-span-1">
-              <label className="block text-zinc-500 text-xs mb-2">Price String</label>
-              <input 
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white focus:border-brand-500/50 outline-none"
-                value={formData.price || ''}
-                onChange={e => setFormData({...formData, price: e.target.value})}
-                placeholder="€950"
-                required
-              />
+            
+            <div className="col-span-2 md:col-span-1 grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-zinc-500 text-xs mb-2">Base Price (Numeric)</label>
+                    <input 
+                        type="number"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white focus:border-brand-500/50 outline-none"
+                        value={formData.priceValue || 0}
+                        onChange={e => handlePriceValueChange(e.target.value)}
+                        placeholder="0"
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="block text-zinc-500 text-xs mb-2">Display Price</label>
+                    <input 
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white focus:border-brand-500/50 outline-none"
+                        value={formData.price || ''}
+                        onChange={e => setFormData({...formData, price: e.target.value})}
+                        placeholder="€0"
+                        required
+                    />
+                </div>
             </div>
             
             <div className="col-span-2">
@@ -207,7 +231,12 @@ export const AdminProducts: React.FC = () => {
                       {product.status || 'draft'}
                     </span>
                   </div>
-                  <p className="text-zinc-500 text-xs">{product.category} • {product.price}</p>
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <span>{product.category}</span>
+                    <span>•</span>
+                    <span className="text-zinc-300">{product.price}</span>
+                    {product.priceValue && <span className="text-[10px] bg-zinc-800 px-1 rounded">Val: {product.priceValue}</span>}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">

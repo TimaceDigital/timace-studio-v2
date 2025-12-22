@@ -1,18 +1,25 @@
-import { Order, Asset, Message, TimelineEvent, UserProfile, Revision, ActivityLog, ProductItem } from '../types';
+import { Order, Asset, Message, TimelineEvent, UserProfile, Revision, ActivityLog, ProductItem, CheckoutFormData } from '../types';
 import { db, functions } from './firebase';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, orderBy, onSnapshot } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
 // Service layer to handle API interaction with Firestore
 
-export const createStripeCheckoutSession = async (product: ProductItem, buildConfiguration: any) => {
+export const createDraftOrder = async (orderData: Partial<Order> & { contactEmail?: string, contactName?: string, totalValue?: number }) => {
+  const createOrder = httpsCallable(functions, 'createDraftOrder');
+  const result = await createOrder(orderData);
+  return result.data as { orderId: string };
+};
+
+export const createStripeCheckoutSession = async (orderId: string) => {
   const createCheckout = httpsCallable(functions, 'createCheckoutSession');
-  const result = await createCheckout({ product, buildConfiguration });
+  const result = await createCheckout({ orderId });
   return result.data as { sessionId: string, url: string };
 };
 
 export const fetchOrders = async (userId: string): Promise<Order[]> => {
-  const q = query(collection(db, "clientOrders"), where("clientId", "==", userId));
+  // Now querying "orders" collection instead of "clientOrders"
+  const q = query(collection(db, "orders"), where("clientId", "==", userId), orderBy("createdAt", "desc"));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
 };

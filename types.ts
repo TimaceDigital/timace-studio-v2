@@ -57,7 +57,7 @@ export interface ProductItem {
 
 // --- Dashboard & Production Types ---
 
-export type OrderStatus = 'queued' | 'analyzing' | 'building' | 'review' | 'completed' | 'cancelled' | 'denied';
+export type OrderStatus = 'queued' | 'pending_approval' | 'approved' | 'analyzing' | 'building' | 'review' | 'completed' | 'cancelled' | 'denied';
 export type UserRole = 'client' | 'admin';
 
 export interface UserProfile {

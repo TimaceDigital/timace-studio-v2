@@ -325,6 +325,12 @@ export const ChevronDownIcon = (props: IconProps) => (
   </IconBase>
 );
 
+export const ChevronRightIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <polyline points="9 18 15 12 9 6" />
+  </IconBase>
+);
+
 export const LayersIcon = (props: IconProps) => (
   <IconBase {...props}>
     <polygon points="12 2 2 7 12 12 22 7 12 2" />

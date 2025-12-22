@@ -3,6 +3,7 @@ import React from 'react';
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   fullWidth?: boolean;
+  icon?: React.ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({ 
@@ -10,6 +11,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary', 
   fullWidth = false, 
   className = '', 
+  icon,
   ...props 
 }) => {
   const baseStyles = "relative px-6 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2 text-sm tracking-wide active:scale-[0.98]";
@@ -26,6 +28,7 @@ export const Button: React.FC<ButtonProps> = ({
       className={`${baseStyles} ${variants[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
+      {icon && <span className="flex items-center justify-center">{icon}</span>}
       {children}
     </button>
   );

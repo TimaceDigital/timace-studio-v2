@@ -3,13 +3,15 @@ import {
   ArrowRightIcon, CheckCircleIcon, CreditCardIcon, 
   FileTextIcon, LockIcon, SparklesIcon, TrashIcon, 
   UploadIcon, UserIcon, PlusIcon, LoaderIcon, ShieldCheckIcon,
-  SettingsIcon, LayoutIcon, DatabaseIcon, ZapIcon
+  SettingsIcon, LayoutIcon, DatabaseIcon, ZapIcon,
+  RocketIcon, GlobeIcon, ServerIcon, DownloadIcon, SearchIcon, FilterIcon, StarIcon,
+  ChevronRightIcon
 } from './Icons';
 import { Button } from './Button';
 import { ProductItem, AiSuggestion, CheckoutFormData, Order, UserProfile } from '../types';
 import { generateCheckoutSuggestions, autofillProjectConfig } from '../services/geminiService';
 import { registerUser } from '../services/authService';
-import { createStripeCheckoutSession } from '../services/dashboardService';
+import { createStripeCheckoutSession, createDraftOrder } from '../services/dashboardService';
 
 interface CheckoutProps {
   cart: ProductItem[];
@@ -20,6 +22,28 @@ interface CheckoutProps {
 }
 
 type CheckoutStep = 'details' | 'customization' | 'payment';
+
+// --- Icon Mapping Helper ---
+const IconMap: Record<string, React.FC<any>> = {
+  RocketIcon, GlobeIcon, ServerIcon, ZapIcon, DownloadIcon, SettingsIcon, LayoutIcon, DatabaseIcon
+};
+
+const getProductIcon = (product: ProductItem) => {
+  // If the product object has a valid ReactNode as 'icon', use it.
+  if (React.isValidElement(product.icon)) {
+      return product.icon;
+  }
+  
+  // If it has an iconName, resolve it
+  if (product.iconName && IconMap[product.iconName]) {
+      const IconComp = IconMap[product.iconName];
+      return <IconComp size={40} className="text-white" />;
+  }
+
+  // Fallback
+  return <ServerIcon size={40} className="text-white" />;
+};
+
 
 // --- Configuration Schema Definition ---
 type FieldType = 'select' | 'color' | 'radio';
@@ -179,13 +203,20 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
     setIsProcessing(true);
 
     try {
-      if (!currentUser) {
+      let finalCurrentUser = currentUser;
+
+      // 1. Account Creation / Validation
+      if (!finalCurrentUser) {
          if (formData.createAccount) {
            if (!formData.contactPassword || formData.contactPassword.length < 6) {
                throw new Error("Please provide a password (min 6 chars) to create your account.");
            }
            try {
-               await registerUser(formData.contactEmail, formData.contactPassword);
+               // This will log the user in automatically
+               const { user } = await registerUser(formData.contactEmail, formData.contactPassword);
+               // We need to fetch the profile or just assume it for the checkout
+               // In a real app, registerUser likely updates the global auth context, but here we might need a refresh.
+               // However, createDraftOrder relies on context.auth, which should be updated.
            } catch (e: any) {
                throw new Error(`Account creation failed: ${e.message}`);
            }
@@ -194,17 +225,41 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
          }
       }
 
+      // 2. Create Draft Order - Sanitize Items
+      const sanitizedItems = cart.map(({ icon, ...rest }) => rest);
+
+      const draftData = {
+        items: sanitizedItems,
+        configurations: formData.configurations,
+        notes: formData.projectDescription,
+        type: paymentMethod === 'invoice' ? 'proposal' : 'standard',
+        contactName: formData.contactName,
+        contactEmail: formData.contactEmail,
+        totalValue: totalValue
+      };
+
+      // We need to wait a moment for auth state to propagate if we just registered
+      if (!currentUser && formData.createAccount) {
+         await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      const { orderId } = await createDraftOrder(draftData);
+
+      // 3. Process Payment or Finalize Proposal
       if (paymentMethod === 'card') {
-        const product = cart[0]; // Assuming single item cart for simplicity
-        const { url } = await createStripeCheckoutSession(product, formData.configurations);
+        const { url } = await createStripeCheckoutSession(orderId);
         window.location.href = url;
       } else {
-        // Handle invoice/proposal request - this part remains the same
+        // Proposal Request - Success immediately
+        setTimeout(() => {
+          onSuccess();
+        }, 1500);
       }
 
     } catch (err: any) {
         setIsProcessing(false);
-        setError(err.message);
+        setError(err.message || String(err));
+        console.error(err);
     }
   };
 
@@ -374,7 +429,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
                        <div key={`${item.id}-${index}`} className="bg-zinc-900/30 border border-zinc-800 rounded-2xl overflow-hidden">
                           <div className="bg-zinc-900/80 p-4 border-b border-zinc-800 flex items-center gap-3">
                              <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${item.gradient} flex items-center justify-center`}>
-                                <div className="scale-75 text-white">{item.icon}</div>
+                                <div className="scale-75 text-white">{getProductIcon(item)}</div>
                              </div>
                              <span className="font-bold text-white text-sm">{item.name}</span>
                              <span className="text-[10px] text-zinc-500 uppercase tracking-widest ml-auto font-mono">Config #{index + 1}</span>
@@ -518,7 +573,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ cart, onRemoveItem, onSucces
                         <div key={idx} className="flex flex-col border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
                            <div className="flex gap-4">
                               <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${item.gradient} flex items-center justify-center shrink-0`}>
-                                 <div className="scale-50 text-white">{item.icon}</div>
+                                 <div className="scale-50 text-white">{getProductIcon(item)}</div>
                               </div>
                               <div className="flex-1 min-w-0">
                                  <h4 className="text-white text-sm font-medium truncate">{item.name}</h4>
