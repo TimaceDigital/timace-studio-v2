@@ -30,10 +30,10 @@ export enum AnalysisStatus {
 }
 
 export interface AnalysisResponse {
-  feasibility: string;
-  stackRecommendation: string;
+  feasibility: string; // High/Medium/Low
+  stackRecommendation: string; // Tech Stack
   estimatedTimeline: string;
-  agenticInsight: string;
+  agenticInsight: string; // Agentic DNA
 }
 
 export interface ProductItem {
@@ -57,7 +57,7 @@ export interface ProductItem {
 
 // --- Dashboard & Production Types ---
 
-export type OrderStatus = 'queued' | 'pending_approval' | 'approved' | 'analyzing' | 'building' | 'review' | 'completed' | 'cancelled' | 'denied';
+export type OrderStatus = 'queued' | 'analyzing' | 'building' | 'review' | 'completed' | 'cancelled' | 'denied' | 'pending_approval';
 export type UserRole = 'client' | 'admin';
 
 export interface UserProfile {
@@ -86,6 +86,7 @@ export interface Order {
   clientEmail?: string;
   title: string;
   status: OrderStatus;
+  paymentStatus: 'pending' | 'paid';
   progress: number; // 0-100
   createdAt: string;
   eta?: string;
@@ -93,21 +94,25 @@ export interface Order {
   thumbnailUrl?: string;
   unreadMessagesCount: number;
   totalValue?: number;
+  stripeSessionId?: string;
   
   // New Dynamic Data Fields
   items?: ProductItem[]; 
-  configurations?: Record<number, Record<string, string>>;
+  configurations?: Record<number, Record<string, string>>; // configPayload
   type?: 'standard' | 'proposal';
-  notes?: string;
+  notes?: string; // rawVision
+  rawVision?: string;
+  blueprintSummary?: AnalysisResponse; // AI Generated
 }
 
 export interface Asset {
   id: string;
   orderId: string;
+  workstreamId?: string;
   name: string;
-  type: 'image' | 'code' | 'document' | 'archive';
+  type: 'image' | 'code' | 'document' | 'archive' | 'code_zip' | 'design_pdf';
   url: string;
-  size: string;
+  size?: string;
   uploadedBy: 'client' | 'admin';
   uploadedAt: string;
 }
@@ -115,11 +120,13 @@ export interface Asset {
 export interface Message {
   id: string;
   orderId: string;
-  senderId: string;
+  senderId?: string; // optional for system messages
+  senderRole?: 'client' | 'admin' | 'system';
   senderName: string;
   content: string;
   timestamp: string;
   isAdmin: boolean;
+  targetWorkstream?: string;
   attachments?: Asset[];
 }
 
@@ -177,6 +184,7 @@ export interface CheckoutFormData {
   createAccount: boolean;
   files: File[];
   configurations: Record<number, Record<string, string>>;
+  analysisResult?: AnalysisResponse;
 }
 
 export interface AiSuggestion {

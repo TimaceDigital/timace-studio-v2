@@ -5,11 +5,12 @@ import Stripe from "stripe";
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true }); // Ensure undefined values don't crash Firestore writes
 
 // Initialize Stripe
 // To set config: firebase functions:config:set stripe.secret="sk_test_..." stripe.webhook_secret="whsec_..."
 const stripe = new Stripe(functions.config().stripe.secret, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2022-11-15",
 });
 
 // --- 1. User Creation Trigger ---
@@ -42,7 +43,7 @@ export const createDraftOrder = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
   }
 
-  const { items, configurations, notes, type, contactEmail, contactName, totalValue } = data;
+  const { items, configurations, notes, rawVision, type, contactEmail, contactName, totalValue, blueprintSummary } = data;
   const uid = context.auth.uid;
 
   const orderData = {
@@ -53,6 +54,8 @@ export const createDraftOrder = functions.https.onCall(async (data, context) => 
     items,
     configurations,
     notes,
+    rawVision,
+    blueprintSummary, // Phase A Analysis Persistence
     type: type || 'standard', // 'standard' or 'proposal'
     status: 'draft', // Initial status
     paymentStatus: 'pending',
@@ -62,8 +65,13 @@ export const createDraftOrder = functions.https.onCall(async (data, context) => 
     unreadMessagesCount: 0
   };
 
-  const orderRef = await db.collection("orders").add(orderData);
-  return { orderId: orderRef.id };
+  try {
+    const orderRef = await db.collection("orders").add(orderData);
+    return { orderId: orderRef.id };
+  } catch (error: any) {
+    console.error("Error creating draft order:", error);
+    throw new functions.https.HttpsError("internal", error.message || "Failed to create order.");
+  }
 });
 
 export const createCheckoutSession = functions.https.onCall(async (data, context) => {
@@ -146,14 +154,16 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
     if (orderId) {
       console.log(`Payment success for Order ${orderId}. Updating status.`);
       
+      // Phase D: Payment & Webhook Transition
       await db.collection("orders").doc(orderId).update({
-        status: "pending_approval", // Ready for admin
+        status: "queued", // Moved from pending_approval to queued as per requirements
         paymentStatus: "paid",
         stripeSessionId: session.id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
-      // Optional: Send email confirmation via extension or generic email service
+      // Trigger Agentic Architect? (Future enhancement)
+      // triggerAgenticArchitect(orderId);
     }
   }
 
